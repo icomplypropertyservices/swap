@@ -41,11 +41,23 @@ export const XRP_LOGO_CANDIDATES = [
   'https://cryptologos.cc/logos/xrp-xrp-logo.png?v=040',
 ]
 
-/** Canonical thumb host — never use bithomp or bare xrpl.to/thumb (404). */
-export function thumbUrl(md5: string, w?: number): string {
-  const base = `https://api.xrpl.to/v1/thumb/${encodeURIComponent(md5)}`
-  // Bare URL is most reliable; optional w can 429 under load
-  return w ? `${base}?w=${w}` : base
+/**
+ * Token thumb URL.
+ * Prefer same-origin proxy `/api/thumb?md5=` so browsers don't stampede
+ * rate-limited api.xrpl.to (which caused letter-only avatars).
+ */
+export function thumbUrl(md5: string, _w?: number): string {
+  const h = encodeURIComponent(md5)
+  // Same-origin proxy (server caches + single upstream)
+  if (typeof window !== 'undefined') {
+    return `/api/thumb?md5=${h}`
+  }
+  return `https://api.xrpl.to/v1/thumb/${h}`
+}
+
+/** Direct upstream (for SSR / server only). */
+export function thumbUrlDirect(md5: string): string {
+  return `https://api.xrpl.to/v1/thumb/${encodeURIComponent(md5)}`
 }
 
 /** Reject known-bad / third-party logo hosts we do not want in the UI. */
@@ -91,10 +103,10 @@ export function getTokenLogoCandidates(
     token.md5 ||
     (typeof token.logo === 'string' ? token.logo.match(/([a-f0-9]{32})/i)?.[1] : undefined)
 
-  // Prefer bare API thumb first (most reliable under rate limits)
+  // Same-origin proxy first, then direct API as fallback
   if (md5) {
     push(thumbUrl(md5))
-    push(thumbUrl(md5, 32))
+    push(thumbUrlDirect(md5))
   }
 
   // Explicit logo only when not a blocked host

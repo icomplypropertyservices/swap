@@ -87,6 +87,38 @@ function swapApiPlugin(mode: string, cwd: string): Plugin {
           res.end(JSON.stringify({ error: e instanceof Error ? e.message : 'proxy error' }))
         }
       })
+      // Token logo proxy (avoids xrpl.to 429 in browser)
+      server.middlewares.use('/api/thumb', async (req, res) => {
+        try {
+          const url = new URL(req.url || '', 'http://local')
+          let md5 = url.searchParams.get('md5') || ''
+          if (!md5) {
+            const m = (req.url || '').match(/\/api\/thumb\/([a-f0-9]{32})/i)
+            if (m) md5 = m[1]
+          }
+          if (!/^[a-f0-9]{32}$/i.test(md5)) {
+            ;(res as ServerResponse).statusCode = 400
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'md5 required' }))
+            return
+          }
+          const up = await fetch(`https://api.xrpl.to/v1/thumb/${md5}`, {
+            headers: {
+              Accept: 'image/webp,image/*',
+              'User-Agent': 'RiddleSwap-dev',
+            },
+          })
+          ;(res as ServerResponse).statusCode = up.status
+          res.setHeader('Content-Type', up.headers.get('content-type') || 'image/webp')
+          res.setHeader('Cache-Control', 'public, max-age=3600')
+          const buf = Buffer.from(await up.arrayBuffer())
+          res.end(buf)
+        } catch (e) {
+          ;(res as ServerResponse).statusCode = 502
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: e instanceof Error ? e.message : 'thumb fail' }))
+        }
+      })
     },
   }
 }
