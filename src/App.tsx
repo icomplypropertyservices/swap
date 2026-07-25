@@ -110,7 +110,12 @@ export default function XrplXummSwap() {
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <Toaster position="top-center" richColors closeButton />
 
-      <AppHeader address={address} onDisconnect={handleDisconnect} />
+      <AppHeader
+        address={address}
+        isConnecting={isConnecting}
+        onConnect={connectXaman}
+        onDisconnect={handleDisconnect}
+      />
 
       <div className="max-w-[720px] mx-auto px-5 pt-7 pb-8">
         <WalletSection
@@ -155,6 +160,8 @@ export default function XrplXummSwap() {
           onSetSlippage={swap.setSlippage}
           onSetMax={swap.setMax}
           onExecuteSwap={swap.executeSwap}
+          onConnect={connectXaman}
+          isConnecting={isConnecting}
           limitSellAmount={limit.limitSellAmount}
           limitPrice={limit.limitPrice}
           limitReceiveAmount={limit.limitReceiveAmount}

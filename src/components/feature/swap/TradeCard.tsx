@@ -29,6 +29,9 @@ export interface TradeCardProps {
   onSetSlippage: (val: number) => void
   onSetMax: () => void
   onExecuteSwap: () => void
+  /** When disconnected, primary CTA connects wallet instead of swapping */
+  onConnect: () => void
+  isConnecting?: boolean
   // Limit
   limitSellAmount: string
   limitPrice: string
@@ -75,6 +78,8 @@ export default function TradeCard({
   onSetSlippage,
   onSetMax,
   onExecuteSwap,
+  onConnect,
+  isConnecting = false,
   limitSellAmount,
   limitPrice,
   limitReceiveAmount,
@@ -91,6 +96,8 @@ export default function TradeCard({
   onRefreshOrders,
   onCancelOrder,
 }: TradeCardProps) {
+  const connected = Boolean(address)
+
   return (
     <div className="swap-card w-full max-w-[480px] mx-auto p-4 sm:p-6 overflow-visible">
       <div className="flex mb-5 sm:mb-6 bg-[#0a0c12] rounded-2xl p-1 text-sm font-semibold border border-[#23262f]">
@@ -133,15 +140,24 @@ export default function TradeCard({
           />
           <button
             type="button"
-            onClick={onExecuteSwap}
-            disabled={!canSwap || isSwapping}
+            onClick={() => {
+              if (!connected) onConnect()
+              else onExecuteSwap()
+            }}
+            disabled={
+              connected
+                ? !canSwap || isSwapping
+                : isConnecting
+            }
             className="primary-btn w-full mt-4 py-[17px] text-[17px] flex items-center justify-center gap-2 disabled:cursor-not-allowed"
           >
-            {isSwapping
-              ? 'Waiting for Xaman signature...'
-              : !address
-                ? 'Connect Xaman to Swap'
-                : 'Swap via XRPL'}
+            {isConnecting
+              ? 'Opening Xaman…'
+              : isSwapping
+                ? 'Waiting for Xaman signature…'
+                : !connected
+                  ? 'Connect Wallet to Swap'
+                  : 'Swap via XRPL'}
           </button>
           <div className="text-center text-[10px] text-slate-600 pt-1">
             Market swap uses Payment • XRPL DEX
