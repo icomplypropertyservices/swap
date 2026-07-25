@@ -1,6 +1,6 @@
 export { default as TokenLogo } from './TokenLogo'
 export { default as TokenDropdown } from './TokenDropdown'
-export { default as ApiKeySection } from './ApiKeySection'
+
 export { default as WalletSection } from './WalletSection'
 export { default as SwapInterface } from './SwapInterface'
 export { default as LimitInterface } from './LimitInterface'

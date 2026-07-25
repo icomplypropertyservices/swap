@@ -16,7 +16,6 @@ export type { UseSwapParams } from './types'
 
 export function useSwap({
   address,
-  apiKey,
   fromToken,
   toToken,
   setFromToken,
@@ -24,7 +23,6 @@ export function useSwap({
   getBalance,
   getClient,
   fetchBalances,
-  onNeedApiKey,
   createPayload,
   openPayload,
   pollPayload,
@@ -139,24 +137,23 @@ export function useSwap({
 
   // Resume Payment swap after return_url / reload
   useEffect(() => {
-    if (!address || !apiKey.trim() || !resumePoll) return
+    if (!address || !resumePoll) return
     const uuid = resolveResumeUuid('swap')
     if (!uuid || resumedUuidRef.current === uuid) return
     resumedUuidRef.current = uuid
 
     swapInFlightRef.current = true
     setIsSwapping(true)
-    resumePoll(uuid, apiKey, {
+    resumePoll(uuid, {
       purpose: 'swap',
       maxAttempts: SWAP_POLL_MAX_ATTEMPTS,
       intervalMs: SWAP_POLL_INTERVAL_MS,
       onSigned: onSwapSigned,
       onRejected: onSwapRejected,
     })
-  }, [address, apiKey, resumePoll, onSwapSigned, onSwapRejected])
+  }, [address, resumePoll, onSwapSigned, onSwapRejected])
 
   const executeSwap = useCallback(async () => {
-    // Guard against double-submit before React re-renders disabled button
     if (swapInFlightRef.current || isSwapping) return
     if (!address) {
       toast.error('Connect Xaman wallet first')
@@ -170,7 +167,6 @@ export function useSwap({
       toast.error('Cannot swap a token to itself')
       return
     }
-    // Server Xaman proxy handles keys; optional personal apiKey still supported
 
     swapInFlightRef.current = true
     setIsSwapping(true)
@@ -183,9 +179,7 @@ export function useSwap({
 
     try {
       const tx = buildSwapTx({ address, fromToken, toToken, payAmount, receiveAmount })
-      // Payment path-find swap: submit:true so Xaman broadcasts after sign
       const data = await createPayload(
-        apiKey,
         {
           txjson: tx,
           options: xamanOptions({ expire: 10, submit: true }),
@@ -193,31 +187,35 @@ export function useSwap({
             instruction: `Swap ${payAmount} ${fromToken.currency} → ${toToken.currency}`,
           },
         },
-        'Xumm create failed'
+        'Xaman create failed',
       )
       openPayload(data)
       resumedUuidRef.current = data.uuid
 
-      // Keep lock until sign poll finishes — do not unlock after createPayload
-      pollPayload(data.uuid, apiKey, {
+      pollPayload(data.uuid, {
         purpose: 'swap',
         maxAttempts: SWAP_POLL_MAX_ATTEMPTS,
         intervalMs: SWAP_POLL_INTERVAL_MS,
-        onSigned: (status) => {
-          onSwapSigned(status)
-        },
-        onRejected: (reason) => {
-          onSwapRejected(reason)
-        },
+        onSigned: onSwapSigned,
+        onRejected: onSwapRejected,
       })
-    } catch (e: any) {
-      toast.error('Swap failed: ' + (e.message || String(e)))
+    } catch (e: unknown) {
+      toast.error('Swap failed: ' + (e instanceof Error ? e.message : String(e)))
       unlockSwap()
     }
   }, [
-    isSwapping, address, payAmount, receiveAmount, fromToken, toToken, apiKey,
-    onNeedApiKey, resetPayload, createPayload, openPayload,
-    pollPayload, onSwapSigned, onSwapRejected,
+    isSwapping,
+    address,
+    payAmount,
+    receiveAmount,
+    fromToken,
+    toToken,
+    resetPayload,
+    createPayload,
+    openPayload,
+    pollPayload,
+    onSwapSigned,
+    onSwapRejected,
   ])
 
   const clearSwapState = useCallback(() => {

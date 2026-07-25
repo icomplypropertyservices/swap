@@ -9,7 +9,6 @@ export const NATIVE_XRP: Token = {
 }
 
 export const XRPL_WS = 'wss://xrplcluster.com'
-export const XUMM_API = 'https://xumm.app/api/v1/platform/payload'
 
 export function currencyToHex(cur: string): string {
   if (!cur || cur === 'XRP') return 'XRP'

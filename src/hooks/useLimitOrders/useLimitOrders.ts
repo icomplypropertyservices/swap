@@ -16,13 +16,11 @@ export type { LimitExpiration, UseLimitOrdersParams } from '../useLimitOrders.ty
 
 export function useLimitOrders({
   address,
-  apiKey,
   fromToken,
   toToken,
   getBalance,
   getClient,
   fetchBalances,
-  onNeedApiKey,
   activeTab,
   createPayload,
   openPayload,
@@ -105,14 +103,14 @@ export function useLimitOrders({
 
   // Resume OfferCreate / OfferCancel after return_url / reload
   useEffect(() => {
-    if (!address || !apiKey.trim() || !resumePoll) return
+    if (!address || !resumePoll) return
     const uuid = resolveResumeUuid(['limit', 'cancel'])
     if (!uuid || resumedUuidRef.current === uuid) return
     resumedUuidRef.current = uuid
 
     limitInFlightRef.current = true
     setIsPlacingLimit(true)
-    resumePoll(uuid, apiKey, {
+    resumePoll(uuid, {
       purpose: 'limit',
       maxAttempts: LIMIT_POLL_MAX_ATTEMPTS,
       intervalMs: LIMIT_POLL_INTERVAL_MS,
@@ -140,10 +138,9 @@ export function useLimitOrders({
         unlockLimit()
       },
     })
-  }, [address, apiKey, resumePoll, setShowPayloadModal, fetchBalances, fetchOpenOrders, unlockLimit])
+  }, [address, resumePoll, setShowPayloadModal, fetchBalances, fetchOpenOrders, unlockLimit])
 
   const placeLimitOrder = useCallback(async () => {
-    // Guard against double-submit before React re-renders disabled button
     if (limitInFlightRef.current || isPlacingLimit) return
     if (!address) {
       toast.error('Connect Xaman first')
@@ -171,7 +168,6 @@ export function useLimitOrders({
         limitExpiration,
       })
       const data = await createPayload(
-        apiKey,
         {
           txjson: tx,
           options: xamanOptions({ expire: 10, submit: true }),
@@ -179,13 +175,12 @@ export function useLimitOrders({
             instruction: `Limit sell ${limitSellAmount} ${fromToken.currency} for ${toToken.currency}`,
           },
         },
-        'Xumm error'
+        'Xaman error',
       )
       openPayload(data)
       resumedUuidRef.current = data.uuid
 
-      // Keep lock until sign poll finishes
-      pollPayload(data.uuid, apiKey, {
+      pollPayload(data.uuid, {
         purpose: 'limit',
         maxAttempts: LIMIT_POLL_MAX_ATTEMPTS,
         intervalMs: LIMIT_POLL_INTERVAL_MS,
@@ -211,70 +206,92 @@ export function useLimitOrders({
           unlockLimit()
         },
       })
-    } catch (e: any) {
-      toast.error('Failed to place order: ' + (e.message || e))
+    } catch (e: unknown) {
+      toast.error('Failed to place order: ' + (e instanceof Error ? e.message : String(e)))
       unlockLimit()
     }
   }, [
-    isPlacingLimit, address, limitSellAmount, limitReceiveAmount, limitExpiration,
-    fromToken, toToken, apiKey, onNeedApiKey, resetPayload, createPayload, openPayload,
-    pollPayload, fetchBalances, fetchOpenOrders, setShowPayloadModal, unlockLimit,
+    isPlacingLimit,
+    address,
+    limitSellAmount,
+    limitReceiveAmount,
+    limitExpiration,
+    fromToken,
+    toToken,
+    resetPayload,
+    createPayload,
+    openPayload,
+    pollPayload,
+    fetchBalances,
+    fetchOpenOrders,
+    setShowPayloadModal,
+    unlockLimit,
   ])
 
-  const cancelOrder = useCallback(async (offerSequence: number) => {
-    if (!address || !apiKey.trim()) {
-      toast.error('Connect with API key first')
-      return
-    }
-    // Prevent concurrent cancel payloads / polls
-    if (limitInFlightRef.current || isPlacingLimit) return
+  const cancelOrder = useCallback(
+    async (offerSequence: number) => {
+      if (!address) {
+        toast.error('Connect Xaman first')
+        return
+      }
+      if (limitInFlightRef.current || isPlacingLimit) return
 
-    limitInFlightRef.current = true
-    setIsPlacingLimit(true)
-    resetPayload()
+      limitInFlightRef.current = true
+      setIsPlacingLimit(true)
+      resetPayload()
 
-    try {
-      const data = await createPayload(
-        apiKey,
-        {
-          txjson: {
-            TransactionType: 'OfferCancel',
-            Account: address,
-            OfferSequence: offerSequence,
+      try {
+        // Account is filled by wallet — do not send Account in txjson
+        const data = await createPayload(
+          {
+            txjson: {
+              TransactionType: 'OfferCancel',
+              OfferSequence: offerSequence,
+            },
+            options: xamanOptions({ submit: true, expire: 10 }),
+            custom_meta: { instruction: `Cancel offer #${offerSequence}` },
           },
-          options: xamanOptions({ submit: true, expire: 10 }),
-          custom_meta: { instruction: `Cancel offer #${offerSequence}` },
-        },
-        'Xumm cancel failed'
-      )
-      openPayload(data)
-      resumedUuidRef.current = data.uuid
+          'Xaman cancel failed',
+        )
+        openPayload(data)
+        resumedUuidRef.current = data.uuid
 
-      pollPayload(data.uuid, apiKey, {
-        purpose: 'cancel',
-        maxAttempts: LIMIT_POLL_MAX_ATTEMPTS,
-        intervalMs: LIMIT_POLL_INTERVAL_MS,
-        onSigned: () => {
-          clearPending()
-          stripXamanQuery()
-          toast.success('Order cancelled')
-          setTimeout(() => {
-            if (address) fetchOpenOrders(address)
-          }, 5000)
-          unlockLimit()
-        },
-        onRejected: () => {
-          clearPending()
-          stripXamanQuery()
-          toast.error('Cancel cancelled or timed out')
-          unlockLimit()
-        },
-      })
-    } catch (e: any) {
-      toast.error('Cancel failed: ' + (e.message || e))
-      unlockLimit()
-    }
-  }, [isPlacingLimit, address, apiKey, resetPayload, createPayload, openPayload, pollPayload, fetchOpenOrders, unlockLimit])
+        pollPayload(data.uuid, {
+          purpose: 'cancel',
+          maxAttempts: LIMIT_POLL_MAX_ATTEMPTS,
+          intervalMs: LIMIT_POLL_INTERVAL_MS,
+          onSigned: () => {
+            clearPending()
+            stripXamanQuery()
+            toast.success('Order cancelled')
+            setTimeout(() => {
+              if (address) fetchOpenOrders(address)
+            }, 5000)
+            unlockLimit()
+          },
+          onRejected: () => {
+            clearPending()
+            stripXamanQuery()
+            toast.error('Cancel cancelled or timed out')
+            unlockLimit()
+          },
+        })
+      } catch (e: unknown) {
+        toast.error('Cancel failed: ' + (e instanceof Error ? e.message : String(e)))
+        unlockLimit()
+      }
+    },
+    [
+      isPlacingLimit,
+      address,
+      resetPayload,
+      createPayload,
+      openPayload,
+      pollPayload,
+      fetchOpenOrders,
+      unlockLimit,
+    ],
+  )
 
   const clearLimitState = useCallback(() => {
     setOpenOrders([])

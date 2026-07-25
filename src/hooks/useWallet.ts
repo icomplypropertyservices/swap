@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { shortAddr } from '../utils/format'
-import type { XummPayloadResponse, XummPayloadStatus } from '../types'
+import type { XummPayloadResponse } from '../types'
+import type { PollCallbacks } from './useXummPayload'
 import {
   clearPending,
   isXamanReturn,
@@ -11,28 +12,16 @@ import {
   stripXamanQuery,
   writeStoredAddress,
   xamanOptions,
-  type PendingPurpose,
 } from '../utils/xamanSession'
 
-type PollCb = {
-  onSigned: (status: XummPayloadStatus) => void
-  onRejected?: (reason: 'cancelled' | 'expired' | 'timeout') => void
-  maxAttempts?: number
-  intervalMs?: number
-  purpose?: PendingPurpose
-}
-
 interface UseWalletParams {
-  apiKey: string
-  onNeedApiKey: () => void
   createPayload: (
-    apiKey: string,
     body: Record<string, unknown>,
-    errorContext?: string
+    errorContext?: string,
   ) => Promise<XummPayloadResponse>
   openPayload: (data: XummPayloadResponse, opts?: { autoOpenMobile?: boolean }) => void
-  pollPayload: (uuid: string, apiKey: string, callbacks: PollCb) => void
-  resumePoll?: (uuid: string, apiKey: string, callbacks: PollCb) => void
+  pollPayload: (uuid: string, callbacks: PollCallbacks) => void
+  resumePoll?: (uuid: string, callbacks: PollCallbacks) => void
   resetPayload: () => void
   clearActivePoll: () => void
   setShowPayloadModal: (v: boolean) => void
@@ -43,8 +32,6 @@ interface UseWalletParams {
 }
 
 export function useWallet({
-  apiKey,
-  onNeedApiKey,
   createPayload,
   openPayload,
   pollPayload,
@@ -79,8 +66,8 @@ export function useWallet({
   const beginSignInSession = useCallback(
     (uuid: string) => {
       setIsConnecting(true)
-      const run = resumePoll || ((u: string, k: string, cb: PollCb) => pollPayload(u, k, cb))
-      run(uuid, apiKey, {
+      const run = resumePoll || pollPayload
+      run(uuid, {
         purpose: 'signin',
         maxAttempts: 60,
         intervalMs: 1800,
@@ -102,10 +89,10 @@ export function useWallet({
         },
       })
     },
-    [apiKey, pollPayload, resumePoll, applyConnected],
+    [pollPayload, resumePoll, applyConnected],
   )
 
-  // Restore address + resume SignIn after return from Xaman (purpose=signin only)
+  // Restore address + resume SignIn after return from Xaman
   useEffect(() => {
     if (resumedRef.current) return
 
@@ -114,7 +101,6 @@ export function useWallet({
       resumedRef.current = true
       setAddress(stored)
       fetchBalances(stored)
-      // Leave swap/limit/cancel pending for those hooks; clear stale signin pending
       const pending = readPending()
       if (pending?.purpose === 'signin') clearPending()
       if (isXamanReturn() && (!pending || pending.purpose === 'signin')) {
@@ -123,8 +109,6 @@ export function useWallet({
       return
     }
 
-    // Only resume SignIn — never poll a swap/limit uuid as connect
-    // Server Xaman works without client apiKey
     const pending = readPending()
     if (pending && pending.purpose !== 'signin') {
       resumedRef.current = true
@@ -141,7 +125,7 @@ export function useWallet({
     beginSignInSession(uuid)
   }, [beginSignInSession, fetchBalances])
 
-  // When user returns from Xaman app, re-poll SignIn payload
+  // Re-poll SignIn when user returns from Xaman app
   useEffect(() => {
     const onVis = () => {
       if (document.visibilityState === 'hidden') return
@@ -163,28 +147,26 @@ export function useWallet({
       window.removeEventListener('pageshow', onVis)
       window.removeEventListener('focus', onVis)
     }
-  }, [apiKey, beginSignInSession, activeUuid, checkOnce])
+  }, [beginSignInSession, activeUuid, checkOnce])
 
   const connectXaman = useCallback(async () => {
     if (isConnecting) return
-    // Prefer server-side Xaman proxy (no client key). Optional personal key still works.
     setIsConnecting(true)
     resetPayload()
     clearPending()
 
     try {
       const data = await createPayload(
-        apiKey, // may be empty → server /api/xaman/payload
         {
           txjson: { TransactionType: 'SignIn' },
           options: xamanOptions({ submit: false, expire: 10 }),
           custom_meta: { instruction: 'Connect to Riddle Swap' },
         },
-        'Xumm error',
+        'Xaman connect failed',
       )
       openPayload(data)
 
-      pollPayload(data.uuid, apiKey, {
+      pollPayload(data.uuid, {
         purpose: 'signin',
         maxAttempts: 60,
         intervalMs: 1800,
@@ -205,17 +187,14 @@ export function useWallet({
           else toast.error('Sign-in cancelled')
         },
       })
-    } catch (e: any) {
-      const msg = e?.message || String(e)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
       toast.error('Connect failed: ' + msg)
-      if (/not configured|API key|503/i.test(msg)) onNeedApiKey()
       console.error(e)
       setIsConnecting(false)
     }
   }, [
     isConnecting,
-    apiKey,
-    onNeedApiKey,
     createPayload,
     openPayload,
     pollPayload,

@@ -46,9 +46,9 @@ export function buildSwapTx({
     }
   }
 
+  // No Account — Xaman fills signing account; server proxy rejects Account in body
   return {
     TransactionType: 'Payment',
-    Account: address,
     Destination: address,
     Amount,
     SendMax,

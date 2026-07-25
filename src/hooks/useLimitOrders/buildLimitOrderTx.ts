@@ -46,9 +46,9 @@ export function buildLimitOrderTx({
     }
   }
 
+  // No Account — Xaman fills signing account; server proxy rejects Account in body
   const tx: any = {
     TransactionType: 'OfferCreate',
-    Account: address,
     TakerGets,
     TakerPays,
   }

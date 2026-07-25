@@ -9,7 +9,7 @@ export {
   filterTokensLocal,
   tokenKey,
 } from './token'
-export { NATIVE_XRP, XRPL_WS, XUMM_API, currencyToHex, isXRP } from './xrpl'
+export { NATIVE_XRP, XRPL_WS, currencyToHex, isXRP } from './xrpl'
 export {
   buildReturnUrl,
   clearPending,

@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import type { XummPayloadResponse, XummPayloadStatus } from '../types'
-import { XUMM_API } from '../utils/xrpl'
 import {
   clearPending,
   isMobileUa,
@@ -12,7 +11,7 @@ import {
 
 export type PayloadStatus = 'pending' | 'signed' | 'rejected' | 'expired'
 
-export interface PollCallbacks {
+export type PollCallbacks = {
   onSigned: (status: XummPayloadStatus) => void
   onRejected?: (reason: 'cancelled' | 'expired' | 'timeout') => void
   maxAttempts?: number
@@ -20,17 +19,39 @@ export interface PollCallbacks {
   purpose?: PendingPurpose
 }
 
-/** Prefer server proxy (keys on Vercel). Optional client API key as fallback. */
+/** Server-only Xaman Platform proxy — keys never leave Vercel. */
 const SERVER_PAYLOAD = '/api/xaman/payload'
 
-function xummErrorMessage(status: number, body: string, context: string): string {
+function errorMessage(status: number, body: string, context: string): string {
   if (status === 503) {
-    return 'Xaman not configured on server — set XUMM_API_KEY + XUMM_API_SECRET on Vercel'
+    return 'Xaman not configured on server (set XUMM_API_KEY + XUMM_API_SECRET)'
   }
   if (status === 403) {
-    return '403 Forbidden — Invalid Xumm API key or app origin not allowed (apps.xumm.dev)'
+    return 'Xaman forbidden — check apps.xumm.dev allowed origins include this domain'
   }
   return `${context}: ${status} ${body.slice(0, 180)}`
+}
+
+async function serverCreate(body: Record<string, unknown>, context: string) {
+  const res = await fetch(SERVER_PAYLOAD, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(errorMessage(res.status, txt, context))
+  }
+  return res.json() as Promise<XummPayloadResponse>
+}
+
+async function serverStatus(uuid: string) {
+  const res = await fetch(`${SERVER_PAYLOAD}?uuid=${encodeURIComponent(uuid)}`)
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(errorMessage(res.status, txt, 'Xaman poll'))
+  }
+  return res.json() as Promise<XummPayloadStatus>
 }
 
 export function useXummPayload() {
@@ -43,8 +64,6 @@ export function useXummPayload() {
   const activePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pollInFlightRef = useRef(false)
   const activeUuidRef = useRef<string | null>(null)
-  /** Empty string = use server proxy */
-  const apiKeyRef = useRef('')
   const callbacksRef = useRef<PollCallbacks | null>(null)
   const visibilityHandlerRef = useRef<(() => void) | null>(null)
 
@@ -94,50 +113,15 @@ export function useXummPayload() {
     setPayloadStatus('pending')
   }, [clearActivePoll])
 
+  /** Create payload via server only. */
   const createPayload = useCallback(
     async (
-      apiKey: string,
       body: Record<string, unknown>,
-      errorContext = 'Xumm create failed',
+      errorContext = 'Xaman create failed',
     ): Promise<XummPayloadResponse> => {
-      const useServer = !apiKey.trim() || serverReady !== false
-      if (useServer) {
-        const res = await fetch(SERVER_PAYLOAD, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        })
-        if (res.ok) return res.json()
-        // Fall through to client key if server missing and user has a key
-        if (res.status === 503 && apiKey.trim()) {
-          /* client fallback below */
-        } else {
-          const txt = await res.text()
-          throw new Error(xummErrorMessage(res.status, txt, errorContext))
-        }
-      }
-
-      if (!apiKey.trim()) {
-        throw new Error(
-          'Xaman not available — server keys not set. Add XUMM_API_KEY/SECRET on Vercel or paste a key.',
-        )
-      }
-
-      const res = await fetch(XUMM_API, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': apiKey.trim(),
-        },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) {
-        const txt = await res.text()
-        throw new Error(xummErrorMessage(res.status, txt, errorContext))
-      }
-      return res.json()
+      return serverCreate(body, errorContext)
     },
-    [serverReady],
+    [],
   )
 
   const openPayload = useCallback((data: XummPayloadResponse, opts?: { autoOpenMobile?: boolean }) => {
@@ -148,29 +132,8 @@ export function useXummPayload() {
     }
   }, [])
 
-  const fetchStatus = useCallback(async (uuid: string, apiKey: string) => {
-    if (!apiKey.trim()) {
-      const res = await fetch(`${SERVER_PAYLOAD}?uuid=${encodeURIComponent(uuid)}`)
-      return res.json() as Promise<XummPayloadStatus>
-    }
-    const res = await fetch(`${XUMM_API}/${uuid}`, {
-      headers: { 'X-API-Key': apiKey.trim() },
-    })
-    return res.json() as Promise<XummPayloadStatus>
-  }, [])
-
-  const checkOnce = useCallback(async () => {
-    const current = activeUuidRef.current
-    const apiKey = apiKeyRef.current
-    const callbacks = callbacksRef.current
-    if (!current || !callbacks || pollInFlightRef.current) return
-    // server mode: apiKey may be empty
-
-    pollInFlightRef.current = true
-    try {
-      const status = await fetchStatus(current, apiKey)
-      if (activeUuidRef.current !== current) return
-
+  const handleStatus = useCallback(
+    (status: XummPayloadStatus, callbacks: PollCallbacks): 'done' | 'pending' => {
       if (status.meta?.signed) {
         clearActivePoll()
         clearPending()
@@ -178,27 +141,43 @@ export function useXummPayload() {
         setPayloadStatus('signed')
         if (status.response?.txid) setTxHash(status.response.txid)
         callbacks.onSigned(status)
-      } else if (status.meta?.cancelled || status.meta?.expired) {
+        return 'done'
+      }
+      if (status.meta?.cancelled || status.meta?.expired) {
         clearActivePoll()
         clearPending()
         stripXamanQuery()
         const reason: 'cancelled' | 'expired' = status.meta?.expired ? 'expired' : 'cancelled'
         setPayloadStatus(reason === 'expired' ? 'expired' : 'rejected')
         callbacks.onRejected?.(reason)
+        return 'done'
       }
+      return 'pending'
+    },
+    [clearActivePoll],
+  )
+
+  const checkOnce = useCallback(async () => {
+    const uuid = activeUuidRef.current
+    const callbacks = callbacksRef.current
+    if (!uuid || !callbacks || pollInFlightRef.current) return
+
+    pollInFlightRef.current = true
+    try {
+      const status = await serverStatus(uuid)
+      if (activeUuidRef.current !== uuid) return
+      handleStatus(status, callbacks)
     } catch {
-      /* ignore transient */
+      /* transient */
     } finally {
       pollInFlightRef.current = false
     }
-  }, [clearActivePoll, fetchStatus])
+  }, [handleStatus])
 
   const pollPayload = useCallback(
-    (uuid: string, apiKey: string, callbacks: PollCallbacks) => {
+    (uuid: string, callbacks: PollCallbacks) => {
       clearActivePoll()
       activeUuidRef.current = uuid
-      // empty key → poll via server proxy
-      apiKeyRef.current = apiKey.trim()
       callbacksRef.current = callbacks
       if (callbacks.purpose) writePending(uuid, callbacks.purpose)
 
@@ -209,8 +188,7 @@ export function useXummPayload() {
 
       const tick = async () => {
         if (pollInFlightRef.current) return
-        const current = activeUuidRef.current
-        if (!current || current !== uuid) return
+        if (activeUuidRef.current !== uuid) return
         pollInFlightRef.current = true
         attempts += 1
         try {
@@ -222,26 +200,9 @@ export function useXummPayload() {
             callbacks.onRejected?.('timeout')
             return
           }
-
-          const status = await fetchStatus(uuid, apiKeyRef.current)
+          const status = await serverStatus(uuid)
           if (activeUuidRef.current !== uuid) return
-
-          if (status.meta?.signed) {
-            clearActivePoll()
-            clearPending()
-            stripXamanQuery()
-            setPayloadStatus('signed')
-            if (status.response?.txid) setTxHash(status.response.txid)
-            callbacks.onSigned(status)
-          } else if (status.meta?.cancelled || status.meta?.expired) {
-            clearActivePoll()
-            clearPending()
-            stripXamanQuery()
-            const reason: 'cancelled' | 'expired' =
-              status.meta?.expired ? 'expired' : 'cancelled'
-            setPayloadStatus(reason === 'expired' ? 'expired' : 'rejected')
-            callbacks.onRejected?.(reason)
-          }
+          handleStatus(status, callbacks)
         } catch {
           /* keep polling */
         } finally {
@@ -264,10 +225,8 @@ export function useXummPayload() {
       }, intervalMs)
       void tick()
     },
-    [clearActivePoll, fetchStatus],
+    [clearActivePoll, handleStatus],
   )
-
-  const resumePoll = pollPayload
 
   return {
     showPayloadModal,
@@ -280,7 +239,8 @@ export function useXummPayload() {
     createPayload,
     openPayload,
     pollPayload,
-    resumePoll,
+    /** Alias — same server poll */
+    resumePoll: pollPayload,
     resetPayload,
     clearActivePoll,
     closePayloadModal,

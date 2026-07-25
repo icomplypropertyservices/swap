@@ -1,7 +1,7 @@
 export { useTokens } from './useTokens'
 export { useXrplClient } from './useXrplClient'
 export { useBalances } from './useBalances'
-export { useApiKey } from './useApiKey'
+
 export { useXummPayload } from './useXummPayload'
 export { useAddTokenModal } from './useAddTokenModal'
 export { useTokenPair } from './useTokenPair'

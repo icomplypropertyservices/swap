@@ -5,7 +5,6 @@ import {
   useTokens,
   useXrplClient,
   useBalances,
-  useApiKey,
   useXummPayload,
   useAddTokenModal,
   useTokenPair,
@@ -17,7 +16,6 @@ import {
 import {
   AppHeader,
   TokenStrip,
-  ApiKeySection,
   WalletSection,
   AddTokenModal,
   PayloadModal,
@@ -26,22 +24,23 @@ import { TradeCard, AppFooter } from './components/feature/swap'
 
 /**
  * Thin orchestrator: wires swap hooks/state to presentational feature components.
+ * Xaman is server-only via /api/xaman/payload — no client API keys.
  */
 export default function XrplXummSwap() {
   const [activeTab, setActiveTab] = useState<'swap' | 'limit'>('swap')
 
-  const { apiKey, setApiKey, showApiKey, setShowApiKey, toggleShowApiKey } = useApiKey()
   const { tokens, addCustomToken, searchTokens } = useTokens()
   const { getClient, disconnectClient } = useXrplClient()
-  const { balances, isLoadingBalances, fetchBalances, setBalances } = useBalances({ getClient, tokens })
+  const { balances, isLoadingBalances, fetchBalances, setBalances } = useBalances({
+    getClient,
+    tokens,
+  })
   const xumm = useXummPayload()
 
   const { fromToken, toToken, setFromToken, setToToken, selectFrom, selectTo, getBalance } =
     useTokenPair(balances)
   const { showAddToken, addTokenPrefill, openAddToken, closeAddToken, handleAddToken } =
     useAddTokenModal(addCustomToken)
-
-  const onNeedApiKey = () => setShowApiKey(true)
 
   const xummWire = {
     createPayload: xumm.createPayload,
@@ -53,8 +52,6 @@ export default function XrplXummSwap() {
   }
 
   const { address, isConnecting, connectXaman, disconnect } = useWallet({
-    apiKey,
-    onNeedApiKey,
     ...xummWire,
     clearActivePoll: xumm.clearActivePoll,
     setPayloadStatus: xumm.setPayloadStatus,
@@ -65,7 +62,6 @@ export default function XrplXummSwap() {
 
   const swap = useSwap({
     address,
-    apiKey,
     fromToken,
     toToken,
     setFromToken,
@@ -73,19 +69,16 @@ export default function XrplXummSwap() {
     getBalance,
     getClient,
     fetchBalances,
-    onNeedApiKey,
     ...xummWire,
   })
 
   const limit = useLimitOrders({
     address,
-    apiKey,
     fromToken,
     toToken,
     getBalance,
     getClient,
     fetchBalances,
-    onNeedApiKey,
     activeTab,
     ...xummWire,
   })
@@ -130,13 +123,12 @@ export default function XrplXummSwap() {
           xamanReady={xumm.serverReady}
         />
 
-        <ApiKeySection
-          apiKey={apiKey}
-          showApiKey={showApiKey}
-          onChange={setApiKey}
-          onToggleShow={toggleShowApiKey}
-          optional
-        />
+        {xumm.serverReady === false && (
+          <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+            Server Xaman is offline (missing XUMM_API_KEY / XUMM_API_SECRET). Connect and swaps
+            will fail until keys are set on Vercel.
+          </div>
+        )}
 
         <TradeCard
           activeTab={activeTab}
