@@ -24,10 +24,25 @@ const SERVER_PAYLOAD = '/api/xaman/payload'
 
 function errorMessage(status: number, body: string, context: string): string {
   if (status === 503) {
-    return 'Xaman not configured on server (set XUMM_API_KEY + XUMM_API_SECRET)'
+    return 'Xaman not configured on server (set XUMM_API_KEY + XUMM_API_SECRET on Vercel)'
+  }
+  // Xumm platform error codes (body: { error: { code, reference } })
+  try {
+    const j = JSON.parse(body)
+    const code = j?.error?.code ?? j?.code
+    if (code === 810 || code === 812) {
+      return (
+        'Xaman API credentials rejected (code ' +
+        code +
+        '). Create a new API Key + Secret at apps.xumm.dev, set XUMM_API_KEY / XUMM_API_SECRET on the riddle-swap Vercel project, and allow origin https://swap.riddlewallet.com'
+      )
+    }
+    if (j?.error && typeof j.error === 'string') return `${context}: ${j.error}`
+  } catch {
+    /* not JSON */
   }
   if (status === 403) {
-    return 'Xaman forbidden — check apps.xumm.dev allowed origins include this domain'
+    return 'Xaman forbidden — invalid API credentials or origin not allowlisted (apps.xumm.dev)'
   }
   return `${context}: ${status} ${body.slice(0, 180)}`
 }
