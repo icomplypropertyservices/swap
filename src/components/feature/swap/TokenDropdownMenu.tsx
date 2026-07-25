@@ -51,7 +51,7 @@ export default function TokenDropdownMenu({
   onAddCustom,
 }: TokenDropdownMenuProps) {
   return (
-    <div className="token-dropdown absolute right-0 mt-2 bg-[#0f1117] border border-[#2a2e38] shadow-2xl z-50 overflow-hidden text-sm">
+    <div className="token-dropdown absolute right-0 mt-2 w-[min(calc(100vw-2.5rem),320px)] bg-[#0f1117] border border-[#2a2e38] shadow-2xl z-[80] overflow-hidden text-sm rounded-2xl">
       <div className="p-2.5 border-b border-[#23262f] bg-[#0f1117] sticky top-0 z-10">
         <div className="relative">
           <input

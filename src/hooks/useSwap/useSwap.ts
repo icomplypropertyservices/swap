@@ -170,11 +170,7 @@ export function useSwap({
       toast.error('Cannot swap a token to itself')
       return
     }
-    if (!apiKey.trim()) {
-      toast.error('Xumm API key required')
-      onNeedApiKey()
-      return
-    }
+    // Server Xaman proxy handles keys; optional personal apiKey still supported
 
     swapInFlightRef.current = true
     setIsSwapping(true)

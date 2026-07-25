@@ -32,6 +32,9 @@ body {
   border: 1px solid #23262f;
   border-radius: 28px;
   box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.4);
+  /* Keep pay/receive panels + token pickers inside the card */
+  position: relative;
+  overflow: visible;
 }
 
 .token-panel {
@@ -39,6 +42,10 @@ body {
   border: 1px solid #23262f;
   border-radius: 20px;
   transition: border-color .1s ease, box-shadow .1s ease;
+  position: relative;
+  overflow: visible;
+  width: 100%;
+  box-sizing: border-box;
 }
 .token-panel:focus-within {
   border-color: #3b82f6;
@@ -48,16 +55,17 @@ body {
 .token-btn {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background: #111318;
   border: 1px solid #2a2e38;
   border-radius: 999px;
-  padding: 6px 14px 6px 8px;
+  padding: 6px 12px 6px 8px;
   font-weight: 600;
-  font-size: 15px;
+  font-size: 14px;
   cursor: pointer;
   transition: all .1s cubic-bezier(0.4,0,0.2,1);
-  min-height: 46px;
+  min-height: 44px;
+  max-width: 100%;
 }
 .token-btn:hover {
   border-color: #3b82f6;

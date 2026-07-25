@@ -120,20 +120,22 @@ export default function XrplXummSwap() {
       <AppHeader address={address} onDisconnect={handleDisconnect} />
 
       <div className="max-w-[720px] mx-auto px-5 pt-7 pb-8">
-        <ApiKeySection
-          apiKey={apiKey}
-          showApiKey={showApiKey}
-          onChange={setApiKey}
-          onToggleShow={toggleShowApiKey}
-        />
-
         <WalletSection
           address={address}
           isLoadingBalances={isLoadingBalances}
           onConnect={connectXaman}
           onRefresh={() => fetchBalances(address)}
-          canConnect={!!apiKey}
+          canConnect
           isConnecting={isConnecting}
+          xamanReady={xumm.serverReady}
+        />
+
+        <ApiKeySection
+          apiKey={apiKey}
+          showApiKey={showApiKey}
+          onChange={setApiKey}
+          onToggleShow={toggleShowApiKey}
+          optional
         />
 
         <TradeCard

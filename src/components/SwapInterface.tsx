@@ -25,6 +25,79 @@ interface SwapInterfaceProps {
   onSearchTokens?: (query: string) => Promise<Token[]>
 }
 
+function TokenRow({
+  label,
+  balance,
+  symbol,
+  amount,
+  readOnly,
+  onAmountChange,
+  onMax,
+  tokens,
+  selected,
+  onSelect,
+  onAddNewToken,
+  onSearchTokens,
+  amountClassName,
+}: {
+  label: string
+  balance: string
+  symbol: string
+  amount: string
+  readOnly?: boolean
+  onAmountChange?: (v: string) => void
+  onMax?: () => void
+  tokens: Token[]
+  selected: Token
+  onSelect: (t: Token) => void
+  onAddNewToken: (prefill?: string) => void
+  onSearchTokens?: (query: string) => Promise<Token[]>
+  amountClassName?: string
+}) {
+  return (
+    <div className="token-panel p-4 sm:p-5">
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <div className="uppercase tracking-[1.5px] text-[10px] font-semibold text-slate-500">
+          {label}
+        </div>
+        <div className="text-xs text-slate-400 flex items-center gap-1 shrink-0">
+          <span className="font-mono">{formatAmount(balance)}</span>
+          <span className="text-slate-500">{symbol}</span>
+          {onMax && (
+            <button
+              type="button"
+              onClick={onMax}
+              className="ml-1 px-2 py-px rounded bg-slate-800 text-blue-400 hover:bg-slate-700 active:bg-slate-900 text-[10px] font-bold"
+            >
+              MAX
+            </button>
+          )}
+        </div>
+      </div>
+      {/* Amount + token selector stay inside this panel */}
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <input
+          type={readOnly ? 'text' : 'number'}
+          value={amount}
+          readOnly={readOnly}
+          onChange={onAmountChange ? (e) => onAmountChange(e.target.value) : undefined}
+          className={`amount-input flex-1 min-w-0 bg-transparent text-3xl sm:text-4xl font-semibold outline-none placeholder:text-slate-700 tracking-tight ${amountClassName || ''}`}
+          placeholder="0"
+        />
+        <div className="shrink-0 max-w-[48%] sm:max-w-none">
+          <TokenDropdown
+            tokens={tokens}
+            selected={selected}
+            onSelect={onSelect}
+            onAddNew={onAddNewToken}
+            onSearch={onSearchTokens}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function SwapInterface({
   payAmount,
   receiveAmount,
@@ -47,96 +120,75 @@ export default function SwapInterface({
   onSearchTokens,
 }: SwapInterfaceProps) {
   return (
-    <div className="space-y-2">
-      {/* FROM PANEL */}
-      <div className="token-panel p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="uppercase tracking-[1.5px] text-[10px] font-semibold text-slate-500">You pay</div>
-          <div className="text-xs text-slate-400 flex items-center gap-1">
-            <span className="font-mono">{formatAmount(fromBalance)}</span>
-            <span className="text-slate-500">{fromToken.symbol}</span>
-            <button onClick={onSetMax} className="ml-1 px-2 py-px rounded bg-slate-800 text-blue-400 hover:bg-slate-700 active:bg-slate-900 text-[10px] font-bold">MAX</button>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            value={payAmount}
-            onChange={e => onPayAmountChange(e.target.value)}
-            className="amount-input flex-1 bg-transparent text-5xl font-semibold outline-none placeholder:text-slate-700 tracking-[-2.5px]"
-            placeholder="0"
-          />
-          <TokenDropdown
-            tokens={tokens}
-            selected={fromToken}
-            onSelect={onFromSelect}
-            onAddNew={onAddNewToken}
-            onSearch={onSearchTokens}
-          />
-        </div>
-      </div>
+    <div className="space-y-2 w-full">
+      <TokenRow
+        label="You pay"
+        balance={fromBalance}
+        symbol={fromToken.symbol}
+        amount={payAmount}
+        onAmountChange={onPayAmountChange}
+        onMax={onSetMax}
+        tokens={tokens}
+        selected={fromToken}
+        onSelect={onFromSelect}
+        onAddNewToken={onAddNewToken}
+        onSearchTokens={onSearchTokens}
+      />
 
-      {/* Beautiful center flip */}
-      <div className="flex justify-center -my-1 relative z-10">
+      <div className="flex justify-center -my-1 relative z-20">
         <button type="button" onClick={onSwitch} className="swap-arrow-btn" title="Switch tokens">
           <ArrowDownUp size={19} />
         </button>
       </div>
 
-      {/* TO PANEL */}
-      <div className="token-panel p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="uppercase tracking-[1.5px] text-[10px] font-semibold text-slate-500">You receive (est.)</div>
-          <div className="text-xs text-slate-400">
-            <span className="font-mono">{formatAmount(toBalance)}</span> {toToken.symbol}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={receiveAmount}
-            readOnly
-            className="amount-input flex-1 bg-transparent text-5xl font-semibold outline-none text-emerald-400 tracking-[-2.5px] placeholder:text-slate-700"
-            placeholder="0"
-          />
-          <TokenDropdown
-            tokens={tokens}
-            selected={toToken}
-            onSelect={onToSelect}
-            onAddNew={onAddNewToken}
-            onSearch={onSearchTokens}
-          />
-        </div>
-      </div>
+      <TokenRow
+        label="You receive (est.)"
+        balance={toBalance}
+        symbol={toToken.symbol}
+        amount={receiveAmount}
+        readOnly
+        tokens={tokens}
+        selected={toToken}
+        onSelect={onToSelect}
+        onAddNewToken={onAddNewToken}
+        onSearchTokens={onSearchTokens}
+        amountClassName="text-emerald-400"
+      />
 
-      {/* Rate + refresh bar */}
-      <div className="rate-bar flex items-center justify-between text-sm mt-1 mb-1">
+      <div className="rate-bar flex items-center justify-between text-sm mt-1 mb-1 gap-2">
         {quoteRate ? (
-          <div>
-            1 {fromToken.symbol} ≈ <span className="font-semibold text-white">{quoteRate.split(' ')[0]}</span> {toToken.symbol}
+          <div className="min-w-0 truncate">
+            1 {fromToken.symbol} ≈{' '}
+            <span className="font-semibold text-white">{quoteRate.split(' ')[0]}</span>{' '}
+            {toToken.symbol}
           </div>
         ) : (
           <div className="text-slate-500 text-xs">Quote rate appears after refresh</div>
         )}
         <button
+          type="button"
           onClick={onFetchQuote}
           disabled={isQuoting}
-          className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-xl border border-[#2a2e38] hover:bg-[#16181f] disabled:opacity-60 active:bg-black"
+          className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-xl border border-[#2a2e38] hover:bg-[#16181f] disabled:opacity-60 active:bg-black shrink-0"
         >
           <RefreshCw size={14} className={isQuoting ? 'animate-spin' : ''} />
           {isQuoting ? '...' : 'Get quote'}
         </button>
       </div>
 
-      {/* Slippage + info row */}
-      <div className="flex items-center justify-between px-1 text-xs">
-        <div className="flex items-center gap-1.5">
+      <div className="flex items-center justify-between px-1 text-xs gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-slate-500">Slippage</span>
-          {[0.5, 1, 2].map(s => (
+          {[0.5, 1, 2].map((s) => (
             <button
               key={s}
+              type="button"
               onClick={() => onSetSlippage(s)}
-              className={`px-2.5 py-0.5 rounded-full text-xs font-medium border transition ${slippage === s ? 'bg-blue-600 text-white border-blue-600' : 'border-[#2a2e38] hover:bg-[#16181f] text-slate-400'}`}
+              className={`px-2.5 py-0.5 rounded-full text-xs font-medium border transition ${
+                slippage === s
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'border-[#2a2e38] hover:bg-[#16181f] text-slate-400'
+              }`}
             >
               {s}%
             </button>

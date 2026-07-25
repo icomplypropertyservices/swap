@@ -10,7 +10,7 @@ interface TokenLogoProps {
 
 const FALLBACK: Token = { symbol: '??', currency: 'XRP' }
 
-/** Session-level: skip URLs that already failed to reduce CDN stampede / 429 loops. */
+/** Session-level: skip URLs that already failed (not shared across size/token). */
 const failedLogoUrls = new Set<string>()
 const okLogoUrls = new Set<string>()
 
@@ -21,16 +21,15 @@ function firstUsableIndex(candidates: string[]): number {
   for (let i = 0; i < candidates.length; i++) {
     if (!failedLogoUrls.has(candidates[i])) return i
   }
-  return candidates.length // all failed → letter avatar
+  return candidates.length
 }
 
 export default function TokenLogo({ token, size = 22 }: TokenLogoProps) {
-  // Guard missing token (empty search / race) — letter avatar fallback
   const safe = token || FALLBACK
   const candidates = useMemo(
     () => getTokenLogoCandidates(safe),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [safe.currency, safe.issuer, safe.logo, safe.md5, safe.ext]
+    [safe.currency, safe.issuer, safe.logo, safe.md5, safe.ext, safe.symbol],
   )
   const [idx, setIdx] = useState(() => firstUsableIndex(candidates))
 
@@ -47,11 +46,10 @@ export default function TokenLogo({ token, size = 22 }: TokenLogoProps) {
     <img
       src={src}
       alt={safe.symbol}
-      className="rounded-full object-contain bg-[#0a0c12] ring-1 ring-inset ring-white/10 flex-shrink-0"
+      className="rounded-full object-cover bg-[#0a0c12] ring-1 ring-inset ring-white/10 flex-shrink-0"
       style={{ width: size, height: size }}
       loading="lazy"
       decoding="async"
-      referrerPolicy="no-referrer"
       onLoad={() => {
         okLogoUrls.add(src)
       }}

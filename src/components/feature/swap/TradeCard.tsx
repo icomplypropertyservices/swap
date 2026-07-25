@@ -92,8 +92,8 @@ export default function TradeCard({
   onCancelOrder,
 }: TradeCardProps) {
   return (
-    <div className="swap-card max-w-[460px] mx-auto p-6">
-      <div className="flex mb-6 bg-[#0a0c12] rounded-2xl p-1 text-sm font-semibold border border-[#23262f]">
+    <div className="swap-card w-full max-w-[480px] mx-auto p-4 sm:p-6 overflow-visible">
+      <div className="flex mb-5 sm:mb-6 bg-[#0a0c12] rounded-2xl p-1 text-sm font-semibold border border-[#23262f]">
         <button
           onClick={() => onTabChange('swap')}
           className={`tab-btn ${activeTab === 'swap' ? 'active' : ''}`}

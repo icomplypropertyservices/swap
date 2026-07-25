@@ -123,20 +123,15 @@ export function useWallet({
       return
     }
 
-    // Wait for API key from localStorage before marking resumed
-    if (!apiKey.trim()) return
-
     // Only resume SignIn — never poll a swap/limit uuid as connect
+    // Server Xaman works without client apiKey
     const pending = readPending()
     if (pending && pending.purpose !== 'signin') {
       resumedRef.current = true
       return
     }
 
-    const uuid =
-      resumeUuidFromUrl() ||
-      pending?.uuid ||
-      null
+    const uuid = resumeUuidFromUrl() || pending?.uuid || null
     if (!uuid) {
       resumedRef.current = true
       return
@@ -144,7 +139,7 @@ export function useWallet({
 
     resumedRef.current = true
     beginSignInSession(uuid)
-  }, [apiKey, beginSignInSession, fetchBalances])
+  }, [beginSignInSession, fetchBalances])
 
   // When user returns from Xaman app, re-poll SignIn payload
   useEffect(() => {
@@ -154,7 +149,7 @@ export function useWallet({
       const pending = readPending()
       if (!pending || pending.purpose !== 'signin') return
       const active = activeUuid?.() ?? null
-      if (!active && pending.uuid && apiKey.trim()) {
+      if (!active && pending.uuid) {
         beginSignInSession(pending.uuid)
         return
       }
@@ -172,24 +167,20 @@ export function useWallet({
 
   const connectXaman = useCallback(async () => {
     if (isConnecting) return
-    if (!apiKey.trim()) {
-      toast.error('Enter your Xumm API Key first (get one at apps.xumm.dev)')
-      onNeedApiKey()
-      return
-    }
+    // Prefer server-side Xaman proxy (no client key). Optional personal key still works.
     setIsConnecting(true)
     resetPayload()
     clearPending()
 
     try {
       const data = await createPayload(
-        apiKey,
+        apiKey, // may be empty → server /api/xaman/payload
         {
           txjson: { TransactionType: 'SignIn' },
           options: xamanOptions({ submit: false, expire: 10 }),
           custom_meta: { instruction: 'Connect to Riddle Swap' },
         },
-        'Xumm error'
+        'Xumm error',
       )
       openPayload(data)
 
@@ -215,13 +206,21 @@ export function useWallet({
         },
       })
     } catch (e: any) {
-      toast.error('Connect failed: ' + (e.message || e))
+      const msg = e?.message || String(e)
+      toast.error('Connect failed: ' + msg)
+      if (/not configured|API key|503/i.test(msg)) onNeedApiKey()
       console.error(e)
       setIsConnecting(false)
     }
   }, [
-    isConnecting, apiKey, onNeedApiKey, createPayload, openPayload, pollPayload,
-    resetPayload, applyConnected,
+    isConnecting,
+    apiKey,
+    onNeedApiKey,
+    createPayload,
+    openPayload,
+    pollPayload,
+    resetPayload,
+    applyConnected,
   ])
 
   const disconnect = useCallback(() => {

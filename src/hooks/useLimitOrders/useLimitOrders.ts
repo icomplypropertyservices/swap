@@ -157,12 +157,6 @@ export function useLimitOrders({
       toast.error('Cannot create order for the same token')
       return
     }
-    if (!apiKey.trim()) {
-      toast.error('Xumm API key required')
-      onNeedApiKey()
-      return
-    }
-
     limitInFlightRef.current = true
     setIsPlacingLimit(true)
     resetPayload()

@@ -35,9 +35,16 @@ export function parseQuickToken(input: string): Token | null {
 
 // --- Token visuals helpers (guarantees image/avatar for EVERY token, including customs) ---
 
+/** Native XRP — no md5 on ledger; use stable public icons. */
+export const XRP_LOGO_CANDIDATES = [
+  'https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png',
+  'https://cryptologos.cc/logos/xrp-xrp-logo.png?v=040',
+]
+
 /** Canonical thumb host — never use bithomp or bare xrpl.to/thumb (404). */
 export function thumbUrl(md5: string, w?: number): string {
-  const base = `https://api.xrpl.to/v1/thumb/${md5}`
+  const base = `https://api.xrpl.to/v1/thumb/${encodeURIComponent(md5)}`
+  // Bare URL is most reliable; optional w can 429 under load
   return w ? `${base}?w=${w}` : base
 }
 
@@ -62,7 +69,7 @@ export function getTokenColor(str: string): string {
 
 /** Build candidate logo URLs for a token (first working one wins in TokenLogo). */
 export function getTokenLogoCandidates(
-  token: Pick<Token, 'logo' | 'md5' | 'ext' | 'symbol' | 'issuer'> | null | undefined
+  token: Pick<Token, 'logo' | 'md5' | 'ext' | 'symbol' | 'issuer' | 'currency'> | null | undefined
 ): string[] {
   if (!token) return []
   const out: string[] = []
@@ -73,15 +80,21 @@ export function getTokenLogoCandidates(
     out.push(u)
   }
 
+  // Native XRP has no ledger md5
+  if (token.currency === 'XRP' && !token.issuer) {
+    for (const u of XRP_LOGO_CANDIDATES) push(u)
+    push(token.logo)
+    return out
+  }
+
   const md5 =
     token.md5 ||
     (typeof token.logo === 'string' ? token.logo.match(/([a-f0-9]{32})/i)?.[1] : undefined)
 
-  // Prefer canonical public API thumb (docs: GET /v1/thumb/{md5}?w=16|32|40|48|64|96|128).
-  // No bithomp. No s1.xrpl.to (403). No bare website /thumb (404).
+  // Prefer bare API thumb first (most reliable under rate limits)
   if (md5) {
-    push(thumbUrl(md5, 48))
     push(thumbUrl(md5))
+    push(thumbUrl(md5, 32))
   }
 
   // Explicit logo only when not a blocked host
@@ -100,6 +113,9 @@ export function normalizeToken(raw: any): Token {
   const md5: string | undefined =
     (typeof raw.md5 === 'string' && raw.md5) ||
     (typeof raw._id === 'string' && /^[a-f0-9]{32}$/i.test(raw._id) ? raw._id : undefined) ||
+    (typeof raw.hashicon === 'string' && /^[a-f0-9]{32}$/i.test(raw.hashicon)
+      ? raw.hashicon
+      : undefined) ||
     (typeof raw.logo === 'string' ? raw.logo.match(/([a-f0-9]{32})/i)?.[1] : undefined) ||
     (typeof raw.icon === 'string' ? raw.icon.match(/([a-f0-9]{32})/i)?.[1] : undefined) ||
     undefined
@@ -108,14 +124,14 @@ export function normalizeToken(raw: any): Token {
 
   // Explicit absolute image URLs — drop blocked hosts (bithomp, s1, bare /thumb)
   const explicit =
-    [raw.logo, raw.icon, raw.image, raw.logoURI].find(
+    [raw.logo, raw.icon, raw.image, raw.logoURI, raw.hashicon].find(
       (u) => typeof u === 'string' && /^https?:\/\//i.test(u) && !isBlockedLogoUrl(u)
     ) || undefined
 
   let logo: string | undefined = explicit
-  // When md5 is known, always use canonical API thumb
+  // When md5 is known, use bare canonical API thumb (no w= — avoids 429 storms)
   if (md5) {
-    logo = thumbUrl(md5, 48)
+    logo = thumbUrl(md5)
   }
 
   const symbolRaw = raw.symbol || raw.name || raw.currency || 'UNK'

@@ -1,7 +1,12 @@
 import type { Token } from '../types'
 
 // XRP is the only minimal native we keep - everything else comes from xrpl.to at runtime
-export const NATIVE_XRP: Token = { symbol: 'XRP', currency: 'XRP', name: 'XRP - Native' }
+export const NATIVE_XRP: Token = {
+  symbol: 'XRP',
+  currency: 'XRP',
+  name: 'XRP - Native',
+  logo: 'https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png',
+}
 
 export const XRPL_WS = 'wss://xrplcluster.com'
 export const XUMM_API = 'https://xumm.app/api/v1/platform/payload'
