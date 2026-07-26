@@ -125,4 +125,6 @@ function swapApiPlugin(mode: string, cwd: string): Plugin {
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), swapApiPlugin(mode, process.cwd())],
+  // Fleet ads env uses Next-style NEXT_PUBLIC_* in addition to Vite's VITE_*
+  envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
 }))

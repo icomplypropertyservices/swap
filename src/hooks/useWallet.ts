@@ -13,6 +13,17 @@ import {
   writeStoredAddress,
   xamanOptions,
 } from '../utils/xamanSession'
+import {
+  clearRiddleWalletSession,
+  hasRiddleWalletSession,
+  listenRiddleWalletConnected,
+  openRiddleWalletConnect,
+  readRiddleWalletSession,
+  THIS_SUITE_APP,
+  type RiddleWalletConnectedMessage,
+} from '../lib/riddleWallet'
+
+export type WalletProvider = 'xaman' | 'riddle-wallet' | null
 
 interface UseWalletParams {
   createPayload: (
@@ -31,6 +42,12 @@ interface UseWalletParams {
   checkOnce?: () => void | Promise<void>
 }
 
+function providerFromSession(): WalletProvider {
+  if (hasRiddleWalletSession()) return 'riddle-wallet'
+  if (readStoredAddress()) return 'xaman'
+  return null
+}
+
 export function useWallet({
   createPayload,
   openPayload,
@@ -44,20 +61,29 @@ export function useWallet({
   activeUuid,
   checkOnce,
 }: UseWalletParams) {
-  const [address, setAddress] = useState(() => readStoredAddress())
+  const [address, setAddress] = useState(() => {
+    const rw = readRiddleWalletSession()
+    return rw?.address || readStoredAddress()
+  })
+  const [walletProvider, setWalletProvider] = useState<WalletProvider>(() => providerFromSession())
   const [isConnecting, setIsConnecting] = useState(false)
   const resumedRef = useRef(false)
 
   const applyConnected = useCallback(
-    (acc: string) => {
+    (acc: string, provider: WalletProvider = 'xaman') => {
       writeStoredAddress(acc)
       clearPending()
       stripXamanQuery()
       setAddress(acc)
+      setWalletProvider(provider)
       setShowPayloadModal(false)
       setPayloadStatus('signed')
       setIsConnecting(false)
-      toast.success('Connected: ' + shortAddr(acc))
+      toast.success(
+        provider === 'riddle-wallet'
+          ? 'Riddle Wallet: ' + shortAddr(acc)
+          : 'Connected: ' + shortAddr(acc),
+      )
       fetchBalances(acc)
     },
     [setShowPayloadModal, setPayloadStatus, fetchBalances],
@@ -78,7 +104,7 @@ export function useWallet({
             toast.error('Signed but no account returned')
             return
           }
-          applyConnected(acc)
+          applyConnected(acc, 'xaman')
         },
         onRejected: (reason) => {
           setIsConnecting(false)
@@ -96,10 +122,21 @@ export function useWallet({
   useEffect(() => {
     if (resumedRef.current) return
 
+    const rw = readRiddleWalletSession()
+    if (rw?.address) {
+      resumedRef.current = true
+      writeStoredAddress(rw.address)
+      setAddress(rw.address)
+      setWalletProvider('riddle-wallet')
+      fetchBalances(rw.address)
+      return
+    }
+
     const stored = readStoredAddress()
     if (stored) {
       resumedRef.current = true
       setAddress(stored)
+      setWalletProvider('xaman')
       fetchBalances(stored)
       const pending = readPending()
       if (pending?.purpose === 'signin') clearPending()
@@ -125,11 +162,20 @@ export function useWallet({
     beginSignInSession(uuid)
   }, [beginSignInSession, fetchBalances])
 
+  // Listen for Riddle Wallet postMessage + ?rw_address= return handoff
+  useEffect(() => {
+    return listenRiddleWalletConnected((msg: RiddleWalletConnectedMessage) => {
+      const acc = msg.address
+      if (!acc) return
+      applyConnected(acc, 'riddle-wallet')
+    })
+  }, [applyConnected])
+
   // Re-poll SignIn when user returns from Xaman app
   useEffect(() => {
     const onVis = () => {
       if (document.visibilityState === 'hidden') return
-      if (readStoredAddress()) return
+      if (readStoredAddress() || hasRiddleWalletSession()) return
       const pending = readPending()
       if (!pending || pending.purpose !== 'signin') return
       const active = activeUuid?.() ?? null
@@ -177,7 +223,9 @@ export function useWallet({
             toast.error('Signed but no account returned')
             return
           }
-          applyConnected(acc)
+          // Xaman connect does not write riddle_wallet_session
+          clearRiddleWalletSession()
+          applyConnected(acc, 'xaman')
         },
         onRejected: (reason) => {
           setIsConnecting(false)
@@ -202,19 +250,43 @@ export function useWallet({
     applyConnected,
   ])
 
+  /** Deep-link to wallet.riddlewallet.com?app=swap&action=connect */
+  const connectRiddleWallet = useCallback(() => {
+    if (isConnecting) return
+    setIsConnecting(true)
+    try {
+      openRiddleWalletConnect({
+        app: THIS_SUITE_APP,
+        chain: 'xrpl',
+        mode: 'tab',
+      })
+      toast.info('Complete connect in Riddle Wallet, then return here')
+      // Allow user to interact again; session arrives via postMessage / return URL
+      window.setTimeout(() => setIsConnecting(false), 2500)
+    } catch (e: unknown) {
+      toast.error('Could not open Riddle Wallet')
+      console.error(e)
+      setIsConnecting(false)
+    }
+  }, [isConnecting])
+
   const disconnect = useCallback(() => {
     clearActivePoll()
     clearPending()
+    clearRiddleWalletSession()
     writeStoredAddress('')
     stripXamanQuery()
     setAddress('')
+    setWalletProvider(null)
     toast.info('Disconnected')
   }, [clearActivePoll])
 
   return {
     address,
     isConnecting,
+    walletProvider,
     connectXaman,
+    connectRiddleWallet,
     disconnect,
   }
 }

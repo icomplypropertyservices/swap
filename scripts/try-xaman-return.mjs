@@ -37,18 +37,29 @@ function ok(name, cond, detail = '') {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-function buildReturnUrl(originPath, uuid) {
-  const base = originPath
-  if (uuid && UUID_RE.test(uuid)) {
-    return `${base}?xaman=${encodeURIComponent(uuid)}`
+/** Mirror Bridge best practice: same path + literal xaman={id} (no brace encode). */
+function buildReturnUrl(hrefOrBase) {
+  try {
+    const u = new URL(hrefOrBase.includes('://') ? hrefOrBase : `https://x.test${hrefOrBase.startsWith('/') ? '' : '/'}${hrefOrBase}`)
+    // When only a path base is passed (e.g. https://host/swap), treat as full URL
+    if (!hrefOrBase.includes('://')) {
+      // unreachable when callers pass absolute base
+    }
+    u.searchParams.delete('xaman')
+    const qs = u.searchParams.toString()
+    const pathAndQuery = u.pathname + (qs ? `?${qs}` : '')
+    const join = pathAndQuery.includes('?') ? '&' : '?'
+    return `${u.origin}${pathAndQuery}${join}xaman={id}${u.hash || ''}`
+  } catch {
+    const base = String(hrefOrBase).replace(/\?.*$/, '').replace(/#.*$/, '')
+    return `${base}?xaman={id}`
   }
-  return `${base}?xaman=1`
 }
 
 function resumeUuidFromUrl(href) {
   try {
     const q = new URL(href).searchParams.get('xaman')
-    if (!q || q === '1') return null
+    if (!q || q === '1' || q === '{id}') return null
     return UUID_RE.test(q) ? q : null
   } catch {
     return null
@@ -64,7 +75,7 @@ function isXamanReturn(href) {
 }
 
 function xamanOptions(opts = {}, originPath = 'https://swap.example/app') {
-  const ret = buildReturnUrl(originPath, opts.uuid)
+  const ret = buildReturnUrl(originPath)
   return {
     submit: opts.submit ?? false,
     expire: opts.expire ?? 10,
@@ -106,17 +117,19 @@ console.log('\n=== 1. Session helper unit tests ===\n')
 const sampleUuid = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
 const base = 'https://riddle.example/swap'
 
-ok('buildReturnUrl generic marker', buildReturnUrl(base) === `${base}?xaman=1`)
+ok('buildReturnUrl uses xaman={id}', buildReturnUrl(base) === `${base}?xaman={id}`)
 ok(
-  'buildReturnUrl with uuid',
-  buildReturnUrl(base, sampleUuid) === `${base}?xaman=${encodeURIComponent(sampleUuid)}`,
+  'buildReturnUrl preserves query + {id}',
+  buildReturnUrl(`${base}?from=XRP&to=USD`) === `${base}?from=XRP&to=USD&xaman={id}`,
 )
 ok('resumeUuidFromUrl ignores ?xaman=1', resumeUuidFromUrl(`${base}?xaman=1`) === null)
+ok('resumeUuidFromUrl ignores unsubstituted {id}', resumeUuidFromUrl(`${base}?xaman={id}`) === null)
 ok(
   'resumeUuidFromUrl extracts uuid',
   resumeUuidFromUrl(`${base}?xaman=${sampleUuid}`) === sampleUuid,
 )
 ok('isXamanReturn true for marker', isXamanReturn(`${base}?xaman=1`))
+ok('isXamanReturn true for {id}', isXamanReturn(`${base}?xaman={id}`))
 ok('isXamanReturn true for uuid', isXamanReturn(`${base}?xaman=${sampleUuid}`))
 ok('isXamanReturn false without param', !isXamanReturn(base))
 
@@ -124,7 +137,7 @@ const signInOpts = xamanOptions({ submit: false, expire: 10 })
 ok('SignIn options include return_url.app', !!signInOpts.return_url?.app)
 ok('SignIn options include return_url.web', !!signInOpts.return_url?.web)
 ok('SignIn submit:false', signInOpts.submit === false)
-ok('SignIn return_url has xaman=1', signInOpts.return_url.app.includes('xaman=1'))
+ok('SignIn return_url has xaman={id}', signInOpts.return_url.app.includes('xaman={id}'))
 
 const payOpts = xamanOptions({ submit: true, expire: 10 })
 ok('Payment options submit:true', payOpts.submit === true)
@@ -243,7 +256,7 @@ if (!apiKey) {
       ok('live create returned uuid', UUID_RE.test(data.uuid))
       ok(
         'request body included return_url',
-        body.options.return_url?.app?.includes('xaman=1'),
+        body.options.return_url?.app?.includes('xaman={id}'),
       )
       const dl = deepLinks(data.uuid, data.next?.always)
       ok('live deep link web present', !!dl.web)

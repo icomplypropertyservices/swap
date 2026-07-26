@@ -14,6 +14,8 @@ interface SwapInterfaceProps {
   isQuoting: boolean
   slippage: number
   tokens: Token[]
+  /** Platform fee in basis points (50 = 0.5%). 0 = none. */
+  feeBps?: number
   onPayAmountChange: (val: string) => void
   onFromSelect: (t: Token) => void
   onToSelect: (t: Token) => void
@@ -109,6 +111,7 @@ export default function SwapInterface({
   isQuoting,
   slippage,
   tokens,
+  feeBps = 0,
   onPayAmountChange,
   onFromSelect,
   onToSelect,
@@ -119,6 +122,7 @@ export default function SwapInterface({
   onAddNewToken,
   onSearchTokens,
 }: SwapInterfaceProps) {
+  const feePercent = feeBps > 0 ? (feeBps / 100).toFixed(feeBps % 100 === 0 ? 0 : 2) : null
   return (
     <div className="space-y-2 w-full">
       <TokenRow
@@ -194,7 +198,13 @@ export default function SwapInterface({
             </button>
           ))}
         </div>
-        <div className="text-[10px] text-slate-500">XRPL DEX</div>
+        <div className="text-[10px] text-slate-500 text-right">
+          {feePercent != null ? (
+            <span className="text-cyan-400/90">Platform fee {feePercent}%</span>
+          ) : (
+            'XRPL DEX'
+          )}
+        </div>
       </div>
     </div>
   )

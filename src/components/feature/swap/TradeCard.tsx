@@ -29,6 +29,8 @@ export interface TradeCardProps {
   onSetSlippage: (val: number) => void
   onSetMax: () => void
   onExecuteSwap: () => void
+  /** Platform fee in basis points (50 = 0.5%) */
+  feeBps?: number
   /** When disconnected, primary CTA connects wallet instead of swapping */
   onConnect: () => void
   isConnecting?: boolean
@@ -78,6 +80,7 @@ export default function TradeCard({
   onSetSlippage,
   onSetMax,
   onExecuteSwap,
+  feeBps = 0,
   onConnect,
   isConnecting = false,
   limitSellAmount,
@@ -137,6 +140,7 @@ export default function TradeCard({
             onSetMax={onSetMax}
             onAddNewToken={onAddNewToken}
             onSearchTokens={onSearchTokens}
+            feeBps={feeBps}
           />
           <button
             type="button"
@@ -152,15 +156,16 @@ export default function TradeCard({
             className="primary-btn w-full mt-4 py-[17px] text-[17px] flex items-center justify-center gap-2 disabled:cursor-not-allowed"
           >
             {isConnecting
-              ? 'Opening Xaman…'
+              ? 'Opening…'
               : isSwapping
-                ? 'Waiting for Xaman signature…'
+                ? 'Waiting for signature…'
                 : !connected
                   ? 'Connect Wallet to Swap'
                   : 'Swap via XRPL'}
           </button>
           <div className="text-center text-[10px] text-slate-600 pt-1">
             Market swap uses Payment • XRPL DEX
+            {feeBps > 0 ? ` • ${(feeBps / 100).toFixed(feeBps % 100 === 0 ? 0 : 2)}% platform fee` : ''}
           </div>
         </>
       )}

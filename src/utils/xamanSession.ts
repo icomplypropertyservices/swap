@@ -83,26 +83,36 @@ export function clearPending() {
 }
 
 /**
- * return_url for Xaman after user signs.
- * - `?xaman=1` = generic return marker (resume via localStorage pending)
- * - `?xaman=<uuid>` = direct resume of that payload after reload
+ * return_url for Xaman after sign — same SPA screen, not a new product path.
+ *
+ * - Preserves pathname + other query (swap from/to/amount/chain) + hash
+ * - Uses Xaman `{id}` placeholder so return deep-links resume that payload
+ * - Literal braces — must not URL-encode (`URLSearchParams` would break `{id}`)
+ *
+ * Mobile: Xaman substitutes `{id}` → real uuid; SPA also keeps localStorage pending
+ * as backup when only a generic marker is present (legacy ?xaman=1 still resumes).
  */
-export function buildReturnUrl(uuid?: string): string | undefined {
+export function buildReturnUrl(_uuid?: string): string | undefined {
   if (typeof window === 'undefined') return undefined
-  const base = `${window.location.origin}${window.location.pathname}`
-  if (uuid && UUID_RE.test(uuid)) {
-    return `${base}?xaman=${encodeURIComponent(uuid)}`
+  try {
+    const u = new URL(window.location.href)
+    u.searchParams.delete('xaman')
+    const qs = u.searchParams.toString()
+    const pathAndQuery = u.pathname + (qs ? `?${qs}` : '')
+    const join = pathAndQuery.includes('?') ? '&' : '?'
+    return `${u.origin}${pathAndQuery}${join}xaman={id}${u.hash || ''}`
+  } catch {
+    return `${window.location.origin}${window.location.pathname}?xaman={id}`
   }
-  return `${base}?xaman=1`
 }
 
-/** Resume uuid from ?xaman=<uuid> only (not the return marker ?xaman=1). */
+/** Resume uuid from ?xaman=<uuid> only (not return markers ?xaman=1 or unsubstituted {id}). */
 export function resumeUuidFromUrl(
   href = typeof window !== 'undefined' ? window.location.href : '',
 ): string | null {
   try {
     const q = new URL(href).searchParams.get('xaman')
-    if (!q || q === '1') return null
+    if (!q || q === '1' || q === '{id}') return null
     return UUID_RE.test(q) ? q : null
   } catch {
     return null

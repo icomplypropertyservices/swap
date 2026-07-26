@@ -12,6 +12,8 @@ export interface UseSwapParams {
   getBalance: (token: Token) => string
   getClient: () => Promise<any>
   fetchBalances: (addr: string) => void
+  /** Platform fee bps applied to min receive (50 = 0.5%). Default 0. */
+  feeBps?: number
   createPayload: (
     body: Record<string, unknown>,
     errorContext?: string,

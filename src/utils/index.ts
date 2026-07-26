@@ -28,3 +28,14 @@ export {
   xamanOptions,
 } from './xamanSession'
 export type { PendingPayload, PendingPurpose } from './xamanSession'
+export {
+  hasSwapDeeplink,
+  isXrplChainParam,
+  normalizePayAmount,
+  parseSwapDeeplink,
+  parseTokenRef,
+  resolveSwapDeeplink,
+  resolveTokenAgainstCatalog,
+  SWAP_QUERY_KEYS,
+} from './swapDeeplink'
+export type { ResolvedSwapDeeplink, SwapDeeplinkParams } from './swapDeeplink'

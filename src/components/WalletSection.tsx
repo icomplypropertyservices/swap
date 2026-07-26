@@ -1,25 +1,33 @@
-import { RefreshCw, Wallet } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { shortAddr } from '../utils/format'
+import ConnectMenu from './ConnectMenu'
 
 interface WalletSectionProps {
   address: string
   isLoadingBalances: boolean
-  onConnect: () => void
+  onConnectXaman: () => void
+  onConnectRiddleWallet: () => void
   onRefresh: () => void
   /** Always allow connect — server Xaman proxy or optional personal key */
   canConnect?: boolean
   isConnecting: boolean
   xamanReady?: boolean | null
+  /** e.g. "Riddle Wallet" when session active */
+  walletLabel?: string | null
+  feePercent?: string | null
 }
 
 export default function WalletSection({
   address,
   isLoadingBalances,
-  onConnect,
+  onConnectXaman,
+  onConnectRiddleWallet,
   onRefresh,
   canConnect = true,
   isConnecting,
   xamanReady,
+  walletLabel,
+  feePercent,
 }: WalletSectionProps) {
   return (
     <div className="mb-6 flex items-center justify-between px-1 gap-3 flex-wrap">
@@ -28,8 +36,13 @@ export default function WalletSection({
           WALLET
         </div>
         {address ? (
-          <div className="font-mono text-xl flex items-center gap-3 tracking-tight">
+          <div className="font-mono text-xl flex items-center gap-3 tracking-tight flex-wrap">
             {shortAddr(address)}
+            {walletLabel && (
+              <span className="text-[10px] font-sans uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/25">
+                {walletLabel}
+              </span>
+            )}
             <button
               type="button"
               onClick={onRefresh}
@@ -42,7 +55,12 @@ export default function WalletSection({
           </div>
         ) : (
           <div className="text-slate-400 text-sm sm:text-base">
-            Connect with Xaman to swap
+            Connect with Riddle Wallet or Xaman to swap
+            {feePercent != null && feePercent !== '' && Number(feePercent) > 0 && (
+              <span className="block text-[11px] text-cyan-400/90 mt-0.5">
+                Riddle Wallet session → {feePercent}% platform fee
+              </span>
+            )}
             {xamanReady === false && (
               <span className="block text-[11px] text-amber-400/90 mt-0.5">
                 Server Xaman not ready — check Vercel env
@@ -53,14 +71,13 @@ export default function WalletSection({
       </div>
 
       {!address ? (
-        <button
-          type="button"
-          onClick={onConnect}
-          disabled={isConnecting || canConnect === false}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 transition active:bg-blue-700 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white disabled:bg-zinc-800 disabled:text-zinc-400 shrink-0 shadow-lg shadow-blue-600/25"
-        >
-          <Wallet size={17} /> {isConnecting ? 'Opening Xaman…' : 'Connect Wallet'}
-        </button>
+        <ConnectMenu
+          variant="section"
+          isConnecting={isConnecting}
+          disabled={canConnect === false}
+          onConnectXaman={onConnectXaman}
+          onConnectRiddleWallet={onConnectRiddleWallet}
+        />
       ) : (
         <div className="uppercase tracking-[1px] text-xs px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
           Connected

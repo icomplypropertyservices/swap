@@ -23,6 +23,7 @@ export function useSwap({
   getBalance,
   getClient,
   fetchBalances,
+  feeBps = 0,
   createPayload,
   openPayload,
   pollPayload,
@@ -62,7 +63,15 @@ export function useSwap({
 
     try {
       const result = await fetchDexQuote(getClient, fromToken, toToken, payAmount, slippage)
-      setReceiveAmount(result.receiveAmount)
+      // Platform fee haircut on min receive (Riddle Wallet session → 0.5%)
+      let receive = result.receiveAmount
+      if (feeBps > 0 && Number.isFinite(feeBps)) {
+        const n = parseFloat(receive)
+        if (Number.isFinite(n) && n > 0) {
+          receive = (n * (1 - feeBps / 10_000)).toFixed(6)
+        }
+      }
+      setReceiveAmount(receive)
       setQuoteRate(result.quoteRate)
     } catch (e: any) {
       console.error(e)
@@ -71,7 +80,7 @@ export function useSwap({
     } finally {
       setIsQuoting(false)
     }
-  }, [payAmount, fromToken, toToken, slippage, getClient])
+  }, [payAmount, fromToken, toToken, slippage, getClient, feeBps])
 
   // Debounced quote refresh — skip ticks while tab is hidden to avoid background DEX spam
   useEffect(() => {
@@ -156,7 +165,7 @@ export function useSwap({
   const executeSwap = useCallback(async () => {
     if (swapInFlightRef.current || isSwapping) return
     if (!address) {
-      toast.error('Connect Xaman wallet first')
+      toast.error('Connect wallet first')
       return
     }
     if (!payAmount || !receiveAmount) {
